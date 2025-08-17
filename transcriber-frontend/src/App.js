@@ -3,26 +3,9 @@ import React, { useState } from "react";
 function App() {
   const [file, setFile] = useState(null);
   const [mode, setMode] = useState("transcribe"); // transcribe or translate
-  const [srcLang, setSrcLang] = useState("auto");
-  const [destLang, setDestLang] = useState("hi");
   const [transcript, setTranscript] = useState("");
   const [translation, setTranslation] = useState("");
   const [loading, setLoading] = useState(false);
-
-
-  const languages = {
-    auto: "Auto Detect",
-    en: "English",
-    hi: "Hindi",
-    ta: "Tamil",
-    te: "Telugu",
-    fr: "French",
-    es: "Spanish",
-    de: "German",
-    zh: "Chinese",
-    ja: "Japanese",
-  };
-
   const handleFileChange = (e) => {
     setFile(e.target.files[0]);
     setTranscript("");
@@ -44,11 +27,6 @@ function App() {
     const formData = new FormData();
     formData.append("file", file);
 
-    if (mode === "translate") {
-      formData.append("src_lang", srcLang);
-      formData.append("dest_lang", destLang);
-    }
-
     try {
       const endpoint =
         mode === "transcribe"
@@ -62,11 +40,11 @@ function App() {
       const data = await response.json();
 
       if (mode === "transcribe") {
-        setTranscript(data.transcript);
+        setTranscript(data.transcript || "");
         setTranslation("");
       } else {
-        setTranscript(data.transcript_original);
-        setTranslation(data.translation);
+        setTranscript("");
+        setTranslation(data.translation || "");
       }
     } catch (error) {
       alert("Error processing audio");
@@ -101,41 +79,9 @@ function App() {
               checked={mode === "translate"}
               onChange={handleModeChange}
             />
-            Translate (Any language)
+            Translate (Hindi → English)
           </label>
         </div>
-
-        {mode === "translate" && (
-          <div style={{ marginTop: 10 }}>
-            <label>
-              From:{" "}
-              <select
-                value={srcLang}
-                onChange={(e) => setSrcLang(e.target.value)}
-              >
-                {Object.entries(languages).map(([code, name]) => (
-                  <option key={code} value={code}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label style={{ marginLeft: 20 }}>
-              To:{" "}
-              <select
-                value={destLang}
-                onChange={(e) => setDestLang(e.target.value)}
-              >
-                {Object.entries(languages).map(([code, name]) => (
-                  <option key={code} value={code}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-        )}
 
         <button type="submit" disabled={loading} style={{ marginTop: 10 }}>
           {loading
@@ -157,16 +103,12 @@ function App() {
 
       {translation && (
         <div style={{ marginTop: 20 }}>
-          <h3>
-            Translation ({languages[destLang] || destLang}):
-          </h3>
+          <h3>Translation (English):</h3>
           <p>{translation}</p>
         </div>
       )}
     </div>
   );
 }
-
-
 
 export default App;
