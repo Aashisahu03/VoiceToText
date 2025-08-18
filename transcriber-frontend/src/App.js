@@ -3,9 +3,11 @@ import React, { useState } from "react";
 function App() {
   const [file, setFile] = useState(null);
   const [mode, setMode] = useState("transcribe"); // transcribe or translate
+  const [language, setLanguage] = useState(""); // auto-detect by default
   const [transcript, setTranscript] = useState("");
   const [translation, setTranslation] = useState("");
   const [loading, setLoading] = useState(false);
+
   const handleFileChange = (e) => {
     setFile(e.target.files[0]);
     setTranscript("");
@@ -26,6 +28,9 @@ function App() {
 
     const formData = new FormData();
     formData.append("file", file);
+    if (language) {
+      formData.append("language", language); // optional
+    }
 
     try {
       const endpoint =
@@ -61,6 +66,7 @@ function App() {
       <form onSubmit={handleSubmit}>
         <input type="file" accept="audio/*" onChange={handleFileChange} />
 
+        {/* Mode selection */}
         <div style={{ marginTop: 10 }}>
           <label>
             <input
@@ -79,7 +85,30 @@ function App() {
               checked={mode === "translate"}
               onChange={handleModeChange}
             />
-            Translate (Hindi → English)
+            Translate (to English)
+          </label>
+        </div>
+
+        {/* Language dropdown */}
+        <div style={{ marginTop: 10 }}>
+          <label>
+            Select Language (optional):
+            <select
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+              style={{ marginLeft: 10 }}
+            >
+              <option value="">Auto Detect</option>
+              <option value="hi">Hindi</option>
+              <option value="te">Telugu</option>
+              <option value="kn">Kannada</option>
+              <option value="ta">Tamil</option>
+              <option value="ml">Malayalam</option>
+              <option value="gu">Gujarati</option>
+              <option value="bn">Bengali</option>
+              <option value="pa">Punjabi</option>
+              <option value="ur">Urdu</option>
+            </select>
           </label>
         </div>
 
