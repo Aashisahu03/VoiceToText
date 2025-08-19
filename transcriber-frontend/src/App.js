@@ -108,6 +108,8 @@ function App() {
               <option value="bn">Bengali</option>
               <option value="pa">Punjabi</option>
               <option value="ur">Urdu</option>
+              <option value="es">Spanish</option>
+              <option value="de">German</option>
             </select>
           </label>
         </div>
