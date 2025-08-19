@@ -103,57 +103,19 @@ export default function App() {
         <button onClick={stopRealtime} style={{ marginLeft: 10 }}>Stop</button>
       </div>
 
-      {/* Language dropdown */}
-      <div style={{ marginTop: 10 }}>
-        <label>
-          Select Language (optional):
-          <select
-            value={language}
-            onChange={(e) => setLanguage(e.target.value)}
-            style={{ marginLeft: 10 }}
-          >
-            <option value="">Auto Detect</option>
-            <option value="hi">Hindi</option>
-            <option value="te">Telugu</option>
-            <option value="kn">Kannada</option>
-            <option value="ta">Tamil</option>
-            <option value="ml">Malayalam</option>
-            <option value="gu">Gujarati</option>
-            <option value="bn">Bengali</option>
-            <option value="pa">Punjabi</option>
-            <option value="ur">Urdu</option>
-          </select>
-        </label>
-      </div>
+      {(transcript || partialTranscript) && (
+        <div style={{ marginTop: 20 }}>
+          <h3>Original Transcript:</h3>
+          <p>{transcript}{partialTranscript && ` (${partialTranscript})`}</p>
+        </div>
+      )}
 
-      <button type="submit" disabled={loading} style={{ marginTop: 10 }}>
-        {loading
-          ? mode === "transcribe"
-            ? "Transcribing..."
-            : "Translating..."
-          : mode === "transcribe"
-            ? "Transcribe"
-            : "Translate"}
-      </button>
-    </form>
-
-      {
-    transcript && (
-      <div style={{ marginTop: 20 }}>
-        <h3>Original Transcript:</h3>
-        <p>{transcript}{partialTranscript && ` (${partialTranscript})`}</p>
-      </div>
-    )
-  }
-
-  {
-    (translation || partialTranslation) && (
-      <div style={{ marginTop: 20 }}>
-        <h3>English Translation:</h3>
-        <pre>{translation}{partialTranslation && ` (${partialTranslation})`}</pre>
-      </div>
-    )
-  }
-    </div >
+      {(translation || partialTranslation) && (
+        <div style={{ marginTop: 20 }}>
+          <h3>English Translation:</h3>
+          <pre>{translation}{partialTranslation && ` (${partialTranslation})`}</pre>
+        </div>
+      )}
+    </div>
   );
 }
