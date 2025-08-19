@@ -1,121 +1,143 @@
-'use client';
-import React, { useState, useRef } from "react";
+import React, { useState } from "react";
 
-export default function App() {
+function App() {
+  const [file, setFile] = useState(null);
+  const [mode, setMode] = useState("transcribe"); // transcribe or translate
+  const [language, setLanguage] = useState(""); // auto-detect by default
   const [transcript, setTranscript] = useState("");
   const [translation, setTranslation] = useState("");
-  const [partialTranscript, setPartialTranscript] = useState("");
-  const [partialTranslation, setPartialTranslation] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const wsRef = useRef(null);
-  const audioContextRef = useRef(null);
-  const streamRef = useRef(null);
-  const processorRef = useRef(null);
-
-  const startRealtime = async () => {
+  const handleFileChange = (e) => {
+    setFile(e.target.files[0]);
     setTranscript("");
     setTranslation("");
-    setPartialTranscript("");
-    setPartialTranslation("");
-
-    wsRef.current = new WebSocket("ws://127.0.0.1:8000/ws/translate");
-    wsRef.current.binaryType = "arraybuffer";
-
-    wsRef.current.onopen = () => console.log("WS open");
-
-    wsRef.current.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data);
-        if (msg.type === "partial") {
-          if (msg.transcript) setPartialTranscript(msg.transcript);
-          if (msg.translation) setPartialTranslation(msg.translation);
-        } else if (msg.type === "final") {
-          if (msg.transcript) setTranscript(prev => prev + msg.transcript + "\n");
-          if (msg.translation) setTranslation(prev => prev + msg.translation + "\n");
-          setPartialTranscript("");
-          setPartialTranslation("");
-        }
-      } catch (err) {
-        console.log("Non-JSON WS message:", event.data);
-      }
-    };
-
-    wsRef.current.onclose = () => console.log("WS closed");
-
-    // get mic & audio context
-    streamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
-    audioContextRef.current = new AudioContext({ sampleRate: 48000 });
-
-    await audioContextRef.current.audioWorklet.addModule("/recorder-worklet.js");
-
-    const source = audioContextRef.current.createMediaStreamSource(streamRef.current);
-    const processor = new AudioWorkletNode(audioContextRef.current, "pcm-recorder", { processorOptions: { downsampleTo: 16000 } });
-    processorRef.current = processor;
-
-    processor.port.onmessage = (e) => {
-      const data = e.data;
-      if (data?.type === "data" && data.payload && wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(data.payload);
-      }
-    };
-
-    const silentGain = audioContextRef.current.createGain();
-    silentGain.gain.value = 0;
-    source.connect(processor);
-    processor.connect(silentGain);
-    silentGain.connect(audioContextRef.current.destination);
   };
 
-  const stopRealtime = async () => {
-    if (wsRef.current) {
-      try {
-        if (wsRef.current.readyState === WebSocket.OPEN) wsRef.current.send("__end__");
-        wsRef.current.close();
-      } catch (err) { console.warn("WS close error:", err); }
-      wsRef.current = null;
+  const handleModeChange = (e) => {
+    setMode(e.target.value);
+    setTranscript("");
+    setTranslation("");
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!file) return alert("Please upload an audio file");
+
+    setLoading(true);
+
+    const formData = new FormData();
+    formData.append("file", file);
+    if (language) {
+      formData.append("language", language); // optional
     }
 
-    if (processorRef.current) {
-      try { processorRef.current.disconnect(); } catch { }
-      processorRef.current = null;
+    try {
+      const endpoint =
+        mode === "transcribe"
+          ? "http://127.0.0.1:8000/transcribe"
+          : "http://127.0.0.1:8000/translate";
+
+      const response = await fetch(endpoint, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await response.json();
+
+      if (mode === "transcribe") {
+        setTranscript(data.transcript || "");
+        setTranslation("");
+      } else {
+        setTranscript("");
+        setTranslation(data.translation || "");
+      }
+    } catch (error) {
+      alert("Error processing audio");
+      console.error(error);
     }
 
-    if (audioContextRef.current) {
-      try { if (audioContextRef.current.state === "running") await audioContextRef.current.close(); } catch { }
-      audioContextRef.current = null;
-    }
-
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop());
-      streamRef.current = null;
-    }
-
-    setPartialTranscript("");
-    setPartialTranslation("");
+    setLoading(false);
   };
 
   return (
-    <div style={{ maxWidth: 700, margin: "auto", padding: 20 }}>
-      <h2>Live Whisper Transcription + Translation</h2>
+    <div style={{ maxWidth: 600, margin: "auto", padding: 20 }}>
+      <h2>Whisper Audio Transcriber & Translator</h2>
 
-      <div style={{ marginTop: 20 }}>
-        <button onClick={startRealtime}>Start Mic</button>
-        <button onClick={stopRealtime} style={{ marginLeft: 10 }}>Stop</button>
-      </div>
+      <form onSubmit={handleSubmit}>
+        <input type="file" accept="audio/*" onChange={handleFileChange} />
 
-      {(transcript || partialTranscript) && (
+        {/* Mode selection */}
+        <div style={{ marginTop: 10 }}>
+          <label>
+            <input
+              type="radio"
+              value="transcribe"
+              checked={mode === "transcribe"}
+              onChange={handleModeChange}
+            />
+            Transcribe (Text only)
+          </label>
+
+          <label style={{ marginLeft: 20 }}>
+            <input
+              type="radio"
+              value="translate"
+              checked={mode === "translate"}
+              onChange={handleModeChange}
+            />
+            Translate (to English)
+          </label>
+        </div>
+
+        {/* Language dropdown */}
+        <div style={{ marginTop: 10 }}>
+          <label>
+            Select Language (optional):
+            <select
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+              style={{ marginLeft: 10 }}
+            >
+              <option value="">Auto Detect</option>
+              <option value="hi">Hindi</option>
+              <option value="te">Telugu</option>
+              <option value="kn">Kannada</option>
+              <option value="ta">Tamil</option>
+              <option value="ml">Malayalam</option>
+              <option value="gu">Gujarati</option>
+              <option value="bn">Bengali</option>
+              <option value="pa">Punjabi</option>
+              <option value="ur">Urdu</option>
+            </select>
+          </label>
+        </div>
+
+        <button type="submit" disabled={loading} style={{ marginTop: 10 }}>
+          {loading
+            ? mode === "transcribe"
+              ? "Transcribing..."
+              : "Translating..."
+            : mode === "transcribe"
+              ? "Transcribe"
+              : "Translate"}
+        </button>
+      </form>
+
+      {transcript && (
         <div style={{ marginTop: 20 }}>
           <h3>Original Transcript:</h3>
-          <p>{transcript}{partialTranscript && ` (${partialTranscript})`}</p>
+          <p>{transcript}</p>
         </div>
       )}
 
-      {(translation || partialTranslation) && (
+      {translation && (
         <div style={{ marginTop: 20 }}>
-          <h3>English Translation:</h3>
-          <pre>{translation}{partialTranslation && ` (${partialTranslation})`}</pre>
+          <h3>Translation (English):</h3>
+          <p>{translation}</p>
         </div>
       )}
     </div>
   );
 }
+
+export default App;
