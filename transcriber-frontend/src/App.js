@@ -1,120 +1,114 @@
-'use client';
-import React, { useState, useRef } from "react";
+import { useState, useRef } from "react";
 
-export default function App() {
-  const [transcript, setTranscript] = useState("");
-  const [translation, setTranslation] = useState("");
-  const [partialTranscript, setPartialTranscript] = useState("");
-  const [partialTranslation, setPartialTranslation] = useState("");
-
-  const wsRef = useRef(null);
-  const audioContextRef = useRef(null);
+export default function Recorder() {
+  const [recording, setRecording] = useState(false);
+  const [audioURL, setAudioURL] = useState(null);
+  const [result, setResult] = useState(null);
+  const [language, setLanguage] = useState(""); // chosen language
+  const [mode, setMode] = useState("transcribe"); // transcribe or translate
+  const mediaRecorderRef = useRef(null);
   const streamRef = useRef(null);
-  const processorRef = useRef(null);
+  const chunks = useRef([]);
 
-  const startRealtime = async () => {
-    setTranscript("");
-    setTranslation("");
-    setPartialTranscript("");
-    setPartialTranslation("");
-
-    wsRef.current = new WebSocket("ws://127.0.0.1:8000/ws/translate");
-    wsRef.current.binaryType = "arraybuffer";
-
-    wsRef.current.onopen = () => console.log("WS open");
-
-    wsRef.current.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data);
-        if (msg.type === "partial") {
-          if (msg.transcript) setPartialTranscript(msg.transcript);
-          if (msg.translation) setPartialTranslation(msg.translation);
-        } else if (msg.type === "final") {
-          if (msg.transcript) setTranscript(prev => prev + msg.transcript + "\n");
-          if (msg.translation) setTranslation(prev => prev + msg.translation + "\n");
-          setPartialTranscript("");
-          setPartialTranslation("");
-        }
-      } catch (err) {
-        console.log("Non-JSON WS message:", event.data);
-      }
-    };
-
-    wsRef.current.onclose = () => console.log("WS closed");
-
-    // get mic & audio context
+  const startRecording = async () => {
     streamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
-    audioContextRef.current = new AudioContext({ sampleRate: 48000 });
+    mediaRecorderRef.current = new MediaRecorder(streamRef.current);
+    chunks.current = [];
 
-    await audioContextRef.current.audioWorklet.addModule("/recorder-worklet.js");
-
-    const source = audioContextRef.current.createMediaStreamSource(streamRef.current);
-    const processor = new AudioWorkletNode(audioContextRef.current, "pcm-recorder", { processorOptions: { downsampleTo: 16000 } });
-    processorRef.current = processor;
-
-    processor.port.onmessage = (e) => {
-      const data = e.data;
-      if (data?.type === "data" && data.payload && wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(data.payload);
+    mediaRecorderRef.current.ondataavailable = (e) => {
+      if (e.data.size > 0) {
+        chunks.current.push(e.data);
       }
     };
 
-    const silentGain = audioContextRef.current.createGain();
-    silentGain.gain.value = 0;
-    source.connect(processor);
-    processor.connect(silentGain);
-    silentGain.connect(audioContextRef.current.destination);
+    mediaRecorderRef.current.onstop = () => {
+      const blob = new Blob(chunks.current, { type: "audio/webm" });
+      setAudioURL(URL.createObjectURL(blob));
+
+      // ✅ stop microphone properly
+      streamRef.current.getTracks().forEach((track) => track.stop());
+    };
+
+    mediaRecorderRef.current.start();
+    setRecording(true);
   };
 
-  const stopRealtime = async () => {
-    if (wsRef.current) {
-      try {
-        if (wsRef.current.readyState === WebSocket.OPEN) wsRef.current.send("__end__");
-        wsRef.current.close();
-      } catch (err) { console.warn("WS close error:", err); }
-      wsRef.current = null;
+  const stopRecording = () => {
+    mediaRecorderRef.current?.stop();
+    setRecording(false);
+  };
+
+  const sendToBackend = async () => {
+    if (!audioURL) return;
+
+    const blob = new Blob(chunks.current, { type: "audio/webm" });
+    const formData = new FormData();
+    formData.append("file", blob, "recording.webm");
+
+    if (language) {
+      formData.append("language", language);
     }
 
-    if (processorRef.current) {
-      try { processorRef.current.disconnect(); } catch { }
-      processorRef.current = null;
-    }
+    const res = await fetch(`http://127.0.0.1:8000/${mode}`, {
+      method: "POST",
+      body: formData,
+    });
 
-    if (audioContextRef.current) {
-      try { if (audioContextRef.current.state === "running") await audioContextRef.current.close(); } catch { }
-      audioContextRef.current = null;
-    }
-
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop());
-      streamRef.current = null;
-    }
-
-    setPartialTranscript("");
-    setPartialTranslation("");
+    const data = await res.json();
+    setResult(data);
   };
 
   return (
-    <div style={{ maxWidth: 700, margin: "auto", padding: 20 }}>
-      <h2>Live Whisper Transcription + Translation</h2>
+    <div>
+      <button onClick={startRecording} disabled={recording}>
+        🎙️ Start Recording
+      </button>
+      <button onClick={stopRecording} disabled={!recording}>
+        ⏹️ Stop Recording
+      </button>
 
-      <div style={{ marginTop: 20 }}>
-        <button onClick={startRealtime}>Start Mic</button>
-        <button onClick={stopRealtime} style={{ marginLeft: 10 }}>Stop</button>
-      </div>
+      {audioURL && (
+        <>
+          <audio src={audioURL} controls />
 
-      {(transcript || partialTranscript) && (
-        <div style={{ marginTop: 20 }}>
-          <h3>Original Transcript:</h3>
-          <p>{transcript}{partialTranscript && ` (${partialTranscript})`}</p>
-        </div>
+          {/* Language Selection */}
+          <div>
+            <label>
+              Select Language:{" "}
+              <select value={language} onChange={(e) => setLanguage(e.target.value)}>
+                <option value="">Auto Detect</option>
+                <option value="en">English</option>
+                <option value="hi">Hindi</option>
+                <option value="ur">Urdu</option>
+                <option value="te">Telugu</option>
+                <option value="kn">Kannada</option>
+                <option value="bn">Bengali</option>
+                <option value="ta">Tamil</option>
+              </select>
+            </label>
+          </div>
+
+          {/* Mode Selection */}
+          <div>
+            <label>
+              Mode:{" "}
+              <select value={mode} onChange={(e) => setMode(e.target.value)}>
+                <option value="transcribe">Transcribe</option>
+                <option value="translate">Translate</option>
+              </select>
+            </label>
+          </div>
+
+          <button onClick={sendToBackend}>
+            {mode === "transcribe" ? "Transcribe" : "Translate"}
+          </button>
+        </>
       )}
 
-      {(translation || partialTranslation) && (
-        <div style={{ marginTop: 20 }}>
-          <h3>English Translation:</h3>
-          <pre>{translation}{partialTranslation && ` (${partialTranslation})`}</pre>
-        </div>
+      {result && (
+        <pre style={{ whiteSpace: "pre-wrap", marginTop: "1rem" }}>
+          {JSON.stringify(result, null, 2)}
+        </pre>
       )}
     </div>
   );
