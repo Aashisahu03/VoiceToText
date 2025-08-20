@@ -1,143 +1,115 @@
-import React, { useState } from "react";
+import { useState, useRef } from "react";
 
-function App() {
-  const [file, setFile] = useState(null);
+export default function Recorder() {
+  const [recording, setRecording] = useState(false);
+  const [audioURL, setAudioURL] = useState(null);
+  const [result, setResult] = useState(null);
+  const [language, setLanguage] = useState(""); // chosen language
   const [mode, setMode] = useState("transcribe"); // transcribe or translate
-  const [language, setLanguage] = useState(""); // auto-detect by default
-  const [transcript, setTranscript] = useState("");
-  const [translation, setTranslation] = useState("");
-  const [loading, setLoading] = useState(false);
+  const mediaRecorderRef = useRef(null);
+  const streamRef = useRef(null);
+  const chunks = useRef([]);
 
-  const handleFileChange = (e) => {
-    setFile(e.target.files[0]);
-    setTranscript("");
-    setTranslation("");
-  };
+  const startRecording = async () => {
+    streamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorderRef.current = new MediaRecorder(streamRef.current);
+    chunks.current = [];
 
-  const handleModeChange = (e) => {
-    setMode(e.target.value);
-    setTranscript("");
-    setTranslation("");
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!file) return alert("Please upload an audio file");
-
-    setLoading(true);
-
-    const formData = new FormData();
-    formData.append("file", file);
-    if (language) {
-      formData.append("language", language); // optional
-    }
-
-    try {
-      const endpoint =
-        mode === "transcribe"
-          ? "http://127.0.0.1:8000/transcribe"
-          : "http://127.0.0.1:8000/translate";
-
-      const response = await fetch(endpoint, {
-        method: "POST",
-        body: formData,
-      });
-      const data = await response.json();
-
-      if (mode === "transcribe") {
-        setTranscript(data.transcript || "");
-        setTranslation("");
-      } else {
-        setTranscript("");
-        setTranslation(data.translation || "");
+    mediaRecorderRef.current.ondataavailable = (e) => {
+      if (e.data.size > 0) {
+        chunks.current.push(e.data);
       }
-    } catch (error) {
-      alert("Error processing audio");
-      console.error(error);
+    };
+
+    mediaRecorderRef.current.onstop = () => {
+      const blob = new Blob(chunks.current, { type: "audio/webm" });
+      setAudioURL(URL.createObjectURL(blob));
+
+      // ✅ stop microphone properly
+      streamRef.current.getTracks().forEach((track) => track.stop());
+    };
+
+    mediaRecorderRef.current.start();
+    setRecording(true);
+  };
+
+  const stopRecording = () => {
+    mediaRecorderRef.current?.stop();
+    setRecording(false);
+  };
+
+  const sendToBackend = async () => {
+    if (!audioURL) return;
+
+    const blob = new Blob(chunks.current, { type: "audio/webm" });
+    const formData = new FormData();
+    formData.append("file", blob, "recording.webm");
+
+    if (language) {
+      formData.append("language", language);
     }
 
-    setLoading(false);
+    const res = await fetch(`http://127.0.0.1:8000/${mode}`, {
+      method: "POST",
+      body: formData,
+    });
+
+    const data = await res.json();
+    setResult(data);
   };
 
   return (
-    <div style={{ maxWidth: 600, margin: "auto", padding: 20 }}>
-      <h2>Whisper Audio Transcriber & Translator</h2>
+    <div>
+      <button onClick={startRecording} disabled={recording}>
+        🎙️ Start Recording
+      </button>
+      <button onClick={stopRecording} disabled={!recording}>
+        ⏹️ Stop Recording
+      </button>
 
-      <form onSubmit={handleSubmit}>
-        <input type="file" accept="audio/*" onChange={handleFileChange} />
+      {audioURL && (
+        <>
+          <audio src={audioURL} controls />
 
-        {/* Mode selection */}
-        <div style={{ marginTop: 10 }}>
-          <label>
-            <input
-              type="radio"
-              value="transcribe"
-              checked={mode === "transcribe"}
-              onChange={handleModeChange}
-            />
-            Transcribe (Text only)
-          </label>
+          {/* Language Selection */}
+          <div>
+            <label>
+              Select Language:{" "}
+              <select value={language} onChange={(e) => setLanguage(e.target.value)}>
+                <option value="">Auto Detect</option>
+                <option value="en">English</option>
+                <option value="hi">Hindi</option>
+                <option value="ur">Urdu</option>
+                <option value="te">Telugu</option>
+                <option value="kn">Kannada</option>
+                <option value="bn">Bengali</option>
+                <option value="ta">Tamil</option>
+              </select>
+            </label>
+          </div>
 
-          <label style={{ marginLeft: 20 }}>
-            <input
-              type="radio"
-              value="translate"
-              checked={mode === "translate"}
-              onChange={handleModeChange}
-            />
-            Translate (to English)
-          </label>
-        </div>
+          {/* Mode Selection */}
+          <div>
+            <label>
+              Mode:{" "}
+              <select value={mode} onChange={(e) => setMode(e.target.value)}>
+                <option value="transcribe">Transcribe</option>
+                <option value="translate">Translate</option>
+              </select>
+            </label>
+          </div>
 
-        {/* Language dropdown */}
-        <div style={{ marginTop: 10 }}>
-          <label>
-            Select Language (optional):
-            <select
-              value={language}
-              onChange={(e) => setLanguage(e.target.value)}
-              style={{ marginLeft: 10 }}
-            >
-              <option value="">Auto Detect</option>
-              <option value="hi">Hindi</option>
-              <option value="te">Telugu</option>
-              <option value="kn">Kannada</option>
-              <option value="ta">Tamil</option>
-              <option value="ml">Malayalam</option>
-              <option value="gu">Gujarati</option>
-              <option value="bn">Bengali</option>
-              <option value="pa">Punjabi</option>
-              <option value="ur">Urdu</option>
-            </select>
-          </label>
-        </div>
-
-        <button type="submit" disabled={loading} style={{ marginTop: 10 }}>
-          {loading
-            ? mode === "transcribe"
-              ? "Transcribing..."
-              : "Translating..."
-            : mode === "transcribe"
-              ? "Transcribe"
-              : "Translate"}
-        </button>
-      </form>
-
-      {transcript && (
-        <div style={{ marginTop: 20 }}>
-          <h3>Original Transcript:</h3>
-          <p>{transcript}</p>
-        </div>
+          <button onClick={sendToBackend}>
+            {mode === "transcribe" ? "Transcribe" : "Translate"}
+          </button>
+        </>
       )}
 
-      {translation && (
-        <div style={{ marginTop: 20 }}>
-          <h3>Translation (English):</h3>
-          <p>{translation}</p>
-        </div>
+      {result && (
+        <pre style={{ whiteSpace: "pre-wrap", marginTop: "1rem" }}>
+          {JSON.stringify(result, null, 2)}
+        </pre>
       )}
     </div>
   );
 }
-
-export default App;
