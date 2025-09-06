@@ -84,6 +84,8 @@ export default function Recorder() {
                 <option value="kn">Kannada</option>
                 <option value="bn">Bengali</option>
                 <option value="ta">Tamil</option>
+                <option value="es">Spanish</option>
+                <option value="de">German</option>
               </select>
             </label>
           </div>
