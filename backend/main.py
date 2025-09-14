@@ -27,5 +27,10 @@ def convert_to_wav(input_path, output_path):
     audio = AudioSegment.from_file(input_path)
     audio.export(output_path, format="wav")
 
+# Health check endpoint for Cloud Run
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "service": "voice-to-text-api"}
+
 # Include routers
 app.include_router(audio_router)

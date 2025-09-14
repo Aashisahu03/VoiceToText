@@ -1,0 +1,42 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.git/
+.mypy_cache/
+.pytest_cache/
+.hypothesis/
+
+.DS_Store
+.vscode/
+.idea/
+
+# Node modules if any
+node_modules/
+
+# Documentation
+README.md
+*.md
+
+# Test files
+test_*
+*_test.py
+tests/
+
+# Temporary files
+*.tmp
+*.temp
